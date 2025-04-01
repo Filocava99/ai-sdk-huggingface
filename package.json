@@ -1,5 +1,5 @@
 {
-  "name": "@tana-ai-sdk/huggingface",
+  "name": "tana-ai-sdk-huggingface",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "sideEffects": false,
