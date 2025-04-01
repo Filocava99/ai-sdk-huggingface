@@ -9,33 +9,33 @@ import { HFTransformersjsCompletionLanguageModel } from './hf-transformersjs-com
 import { HFTransformersjsEmbeddingModel } from './hf-transformersjs-embedding-model';
 
 export interface HFTransformersjsProvider<
-  CHAT_MODEL_IDS extends string = string,
-  COMPLETION_MODEL_IDS extends string = string,
-  EMBEDDING_MODEL_IDS extends string = string,
+    CHAT_MODEL_IDS extends string = string,
+    COMPLETION_MODEL_IDS extends string = string,
+    EMBEDDING_MODEL_IDS extends string = string,
 > extends ProviderV1 {
   (
-    modelId: CHAT_MODEL_IDS,
-    settings?: Record<string, unknown>,
+      modelId: CHAT_MODEL_IDS,
+      settings?: Record<string, unknown>,
   ): LanguageModelV1;
 
   languageModel(
-    modelId: CHAT_MODEL_IDS,
-    settings?: Record<string, unknown>,
+      modelId: CHAT_MODEL_IDS,
+      settings?: Record<string, unknown>,
   ): LanguageModelV1;
 
   chatModel(
-    modelId: CHAT_MODEL_IDS,
-    settings?: Record<string, unknown>,
+      modelId: CHAT_MODEL_IDS,
+      settings?: Record<string, unknown>,
   ): LanguageModelV1;
 
   completionModel(
-    modelId: COMPLETION_MODEL_IDS,
-    settings?: Record<string, unknown>,
+      modelId: COMPLETION_MODEL_IDS,
+      settings?: Record<string, unknown>,
   ): LanguageModelV1;
 
   textEmbeddingModel(
-    modelId: EMBEDDING_MODEL_IDS,
-    settings?: Record<string, unknown>,
+      modelId: EMBEDDING_MODEL_IDS,
+      settings?: Record<string, unknown>,
   ): EmbeddingModelV1<string>;
 }
 
@@ -52,15 +52,15 @@ export interface HFTransformersjsProviderSettings {
 }
 
 export function createHFTransformersjs<
-  CHAT_MODEL_IDS extends string,
-  COMPLETION_MODEL_IDS extends string,
-  EMBEDDING_MODEL_IDS extends string,
+    CHAT_MODEL_IDS extends string,
+    COMPLETION_MODEL_IDS extends string,
+    EMBEDDING_MODEL_IDS extends string,
 >(
-  options: HFTransformersjsProviderSettings,
+    options: HFTransformersjsProviderSettings,
 ): HFTransformersjsProvider<
-  CHAT_MODEL_IDS,
-  COMPLETION_MODEL_IDS,
-  EMBEDDING_MODEL_IDS
+    CHAT_MODEL_IDS,
+    COMPLETION_MODEL_IDS,
+    EMBEDDING_MODEL_IDS
 > {
   // Create the common configuration for pipelines
   const getCommonModelConfig = () => ({
@@ -70,45 +70,47 @@ export function createHFTransformersjs<
 
   // Create a chat / text-generation model
   const createChatModel = (
-    modelId: CHAT_MODEL_IDS,
-    settings: Record<string, unknown> = {},
-  ) =>
-    new HFTransformersjsChatLanguageModel(modelId, settings, getCommonModelConfig());
+      modelId: CHAT_MODEL_IDS,
+      settings: Record<string, unknown> = {},
+  ): LanguageModelV1 =>
+      new HFTransformersjsChatLanguageModel(modelId, settings, getCommonModelConfig());
 
   // For legacy or general languageModel access
   const createLanguageModel = (
-    modelId: CHAT_MODEL_IDS,
-    settings: Record<string, unknown> = {},
-  ) => createChatModel(modelId, settings);
+      modelId: CHAT_MODEL_IDS,
+      settings: Record<string, unknown> = {},
+  ): LanguageModelV1 => createChatModel(modelId, settings);
 
   // Create a completion model if it's somehow different
   const createCompletionModel = (
-    modelId: COMPLETION_MODEL_IDS,
-    settings: Record<string, unknown> = {},
-  ) =>
-    new HFTransformersjsCompletionLanguageModel(modelId, settings, getCommonModelConfig());
+      modelId: COMPLETION_MODEL_IDS,
+      settings: Record<string, unknown> = {},
+  ): LanguageModelV1 =>
+      new HFTransformersjsCompletionLanguageModel(modelId, settings, getCommonModelConfig());
 
   // Create an embedding model
   const createEmbeddingModel = (
-    modelId: EMBEDDING_MODEL_IDS,
-    settings: Record<string, unknown> = {},
-  ) =>
-    new HFTransformersjsEmbeddingModel(modelId, settings, getCommonModelConfig());
+      modelId: EMBEDDING_MODEL_IDS,
+      settings: Record<string, unknown> = {},
+  ): EmbeddingModelV1<string> =>
+      new HFTransformersjsEmbeddingModel(modelId, settings, getCommonModelConfig());
 
   // The main provider function (returns a default language model)
-  const provider = (
-    modelId: CHAT_MODEL_IDS,
-    settings?: Record<string, unknown>,
-  ) => createLanguageModel(modelId, settings);
+  const provider = function(
+      modelId: CHAT_MODEL_IDS,
+      settings?: Record<string, unknown>,
+  ): LanguageModelV1 {
+    return createLanguageModel(modelId, settings);
+  } as unknown as HFTransformersjsProvider<
+      CHAT_MODEL_IDS,
+      COMPLETION_MODEL_IDS,
+      EMBEDDING_MODEL_IDS
+  >;
 
   provider.languageModel = createLanguageModel;
   provider.chatModel = createChatModel;
   provider.completionModel = createCompletionModel;
   provider.textEmbeddingModel = createEmbeddingModel;
 
-  return provider as HFTransformersjsProvider<
-    CHAT_MODEL_IDS,
-    COMPLETION_MODEL_IDS,
-    EMBEDDING_MODEL_IDS
-  >;
+  return provider;
 }

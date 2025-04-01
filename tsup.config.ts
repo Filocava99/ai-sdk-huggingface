@@ -1,12 +1,17 @@
-import tsconfigPaths from "vite-tsconfig-paths"
-import { defineConfig } from "vitest/config"
+import { defineConfig } from 'tsup';
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [tsconfigPaths()],
-  test: {
-    environment: "node",
-    globals: true,
-    include: ["**/*.test.ts", "**/*.test.tsx"],
+export default defineConfig([
+  {
+    entry: ['src/index.ts'],
+    format: ['cjs', 'esm'],
+    dts: true,
+    sourcemap: true,
   },
-})
+  {
+    entry: ['src/internal/index.ts'],
+    outDir: 'internal/dist',
+    format: ['cjs', 'esm'],
+    dts: true,
+    sourcemap: true,
+  },
+]);

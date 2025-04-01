@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HFTransformersjsChatLanguageModel } from "./hf-transformersjs-chat-language-model";
 import { pipeline, TextStreamer } from "@huggingface/transformers";
+import {LanguageModelV1CallOptions, LanguageModelV1Prompt, LanguageModelV1TextPart} from "@ai-sdk/provider";
 
 // --- MOCK THE TRANSFORMERS API ---
 // We simulate the pipeline() function and the TextStreamer class.
@@ -20,103 +21,160 @@ vi.mock("@huggingface/transformers", () => {
 });
 
 describe("HFTransformersjsChatLanguageModel", () => {
-  const fakePipelineResultNonStreaming = async (prompt: string, generationOptions: any) => {
-    // For non-streaming we simply return a single result.
-    return [{ generated_text: prompt + " (generated)" }];
-  };
+  let mockTextGenerationPipeline;
 
-  const fakePipelineResultStreaming = async (prompt: string, generationOptions: any) => {
-    // For streaming, our fake pipeline calls the provided callback one token at a time.
-    // Assume tokens are: ["Hello", " ", "world", "!"]
-    if (generationOptions.streamer && typeof generationOptions.streamer.callback_function === "function") {
-      const tokens = ["Hello", " ", "world", "!"];
-      for (const token of tokens) {
-        generationOptions.streamer.callback_function(token);
-      }
+  const fakePipelineResultNonStreaming = [
+    {
+      [-1]: { generated_text: "Hello (generated)" }
     }
-    return [{ generated_text: "Hello world!" }];
-  };
+  ];
 
   beforeEach(() => {
     // Reset the mock before each test.
-    (pipeline as any).mockReset();
+    vi.clearAllMocks();
+
+    mockTextGenerationPipeline = vi.fn().mockImplementation(async (prompt, options) => {
+      // For streaming mode, use the streamer callbacks if provided
+      if (options.streamer && typeof options.streamer.callback_function === "function") {
+        const tokens = ["Hello", " ", "world", "!"];
+        for (const token of tokens) {
+          options.streamer.callback_function(token);
+        }
+      }
+
+      // Return the appropriate response
+      return fakePipelineResultNonStreaming;
+    });
+
+    // Mock the pipeline factory function
+    (pipeline as any).mockResolvedValue(mockTextGenerationPipeline);
   });
 
   it("should generate text with doGenerate using a string prompt", async () => {
-    (pipeline as any).mockResolvedValue({
-      tokenizer: { dummy: true },
-      // When called, the fake pipeline returns a promise resolving an array
-      // with generated_text: prompt + ' (generated)'
-      call: fakePipelineResultNonStreaming,
-    });
-    // To simulate our usage we have our model call pipeline() internally.
-    // Our HF class calls pn(prompt, generationOptions) so we mimic that
-    (pipeline as any).mockImplementation(async () => fakePipelineResultNonStreaming);
-
     const model = new HFTransformersjsChatLanguageModel(
-      "test-model",
-      {},
-      { provider: "hf-test", apiKey: "dummy" }
+        "test-model",
+        {},
+        { provider: "hf-test", apiKey: "dummy" }
     );
 
+    const prompt: LanguageModelV1Prompt = [
+      { role: "user", content: "Hello" }
+    ];
+
     const result = await model.doGenerate({
-      prompt: "Hello",
+      prompt,
       maxTokens: 100,
       temperature: 0,
     });
 
     expect(result.text).toBe("Hello (generated)");
-    const expectedBody = JSON.stringify({
-      prompt: "Hello",
+    const expectedSettings = {
       max_new_tokens: 100,
       do_sample: false, // because temperature === 0
       temperature: 0,
-    });
-    expect(result.request.body).toBe(expectedBody);
+    };
+    expect(result.rawCall.rawSettings).toEqual(expectedSettings);
   });
 
   it("should generate text with doGenerate using a message array prompt", async () => {
-    (pipeline as any).mockImplementation(async () => fakePipelineResultNonStreaming);
-
     const model = new HFTransformersjsChatLanguageModel(
-      "test-model",
-      {},
-      { provider: "hf-test", apiKey: "dummy" }
+        "test-model",
+        {},
+        { provider: "hf-test", apiKey: "dummy" }
     );
+
     const promptMessages = [
       { role: "user", content: "Hello" },
       { role: "assistant", content: "Hi" },
     ];
+
     const result = await model.doGenerate({
       prompt: promptMessages,
       maxTokens: 200,
       temperature: 0.5,
     });
 
-    // The implementation joins the messages with newline.
-    expect(result.text).toBe("Hello\nHi (generated)");
+    // The implementation formats messages appropriately
+    expect(mockTextGenerationPipeline).toHaveBeenCalledWith(
+        expect.stringContaining("Hello"),
+        expect.objectContaining({
+          max_new_tokens: 200,
+          do_sample: true,
+          temperature: 0.5
+        })
+    );
+    expect(result.text).toBe("Hello (generated)");
+  });
+
+  it("should handle prompts with content as an array of parts", async () => {
+    const model = new HFTransformersjsChatLanguageModel(
+        "test-model",
+        {},
+        { provider: "hf-test", apiKey: "dummy" }
+    );
+
+    const textPart1: LanguageModelV1TextPart = { text: "Hello" };
+    const textPart2: LanguageModelV1TextPart = { text: "world" };
+
+    const promptMessages = [
+      { role: "user", content: [textPart1, textPart2] },
+    ];
+
+    const result = await model.doGenerate({
+      prompt: promptMessages,
+      maxTokens: 150,
+      temperature: 0.7,
+    });
+
+    expect(mockTextGenerationPipeline).toHaveBeenCalledWith(
+        "Hello world",
+        expect.anything()
+    );
+    expect(result.text).toBe("Hello (generated)");
   });
 
   it("should stream tokens with doStream", async () => {
-    (pipeline as any).mockImplementation(async () => fakePipelineResultStreaming);
-    let collectedTokens: string[] = [];
-    const onToken = (token: string) => {
-      collectedTokens.push(token);
-    };
-
     const model = new HFTransformersjsChatLanguageModel(
-      "test-model",
-      {},
-      { provider: "hf-test", apiKey: "dummy" }
+        "test-model",
+        {},
+        { provider: "hf-test", apiKey: "dummy" }
     );
-    const result = await model.doStream({
-      prompt: "Hello",
+
+    const prompt: LanguageModelV1Prompt = [
+      { role: "user", content: "Hello" }
+    ];
+
+    const { stream } = await model.doStream({
+      prompt,
       maxTokens: 50,
       temperature: 0.7,
-      onToken,
-    });
-    expect(collectedTokens).toEqual(["Hello", " ", "world", "!"]);
-    // We check that the request body contains the correct prompt.
-    expect(result.request.body).toContain('"prompt":"Hello"');
+    } as LanguageModelV1CallOptions);
+
+    // Test that the stream produces the expected tokens
+    const reader = stream.getReader();
+    const tokens = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      tokens.push(value);
+    }
+
+    expect(tokens).toEqual([
+      { type: 'text-delta', textDelta: 'Hello' },
+      { type: 'text-delta', textDelta: ' ' },
+      { type: 'text-delta', textDelta: 'world' },
+      { type: 'text-delta', textDelta: '!' }
+    ]);
+
+    expect(mockTextGenerationPipeline).toHaveBeenCalledWith(
+        expect.stringContaining("Hello"),
+        expect.objectContaining({
+          max_new_tokens: 50,
+          do_sample: true,
+          temperature: 0.7,
+          streamer: expect.any(TextStreamer)
+        })
+    );
   });
 });

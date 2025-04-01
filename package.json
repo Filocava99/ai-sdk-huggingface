@@ -1,6 +1,6 @@
 {
-  "name": "@ai-sdk/openai-compatible",
-  "version": "0.1.14",
+  "name": "@ai-sdk/huggingface",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup tsup.config.ts",
     "dev": "tsup -d --watch",
     "lint": "eslint \"./**/*.ts*\"",
     "test": "pnpm test:node && pnpm test:edge",
@@ -37,7 +37,7 @@
   "dependencies": {
     "@ai-sdk/provider": "^1.0.7",
     "@ai-sdk/provider-utils": "^2.1.6",
-    "@huggingface/transformers": "^3.4.0"
+    "@huggingface/transformers": "^3.4.1"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^4.1.1",
@@ -53,6 +53,7 @@
     "husky": "^9.1.7",
     "prettier": "^3.4.2",
     "tsup": "^8.3.6",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.5",
@@ -68,5 +69,6 @@
   },
   "keywords": [
     "ai"
-  ]
+  ],
+  "packageManager": "pnpm@10.6.5+sha512.cdf928fca20832cd59ec53826492b7dc25dc524d4370b6b4adbf65803d32efaa6c1c88147c0ae4e8d579a6c9eec715757b50d4fa35eea179d868eada4ed043af"
 }
