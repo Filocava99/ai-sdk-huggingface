@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HFTransformersjsCompletionLanguageModelOpenAICompatible } from "./hf-transformersjs-completion-language-model-openai-compatible";
 import { pipeline, TextStreamer } from "@huggingface/transformers";

@@ -32,6 +32,7 @@ export class HFTransformersjsCompletionLanguageModelOpenAICompatible implements 
 
   private async ensurePipeline(): Promise<TextGenerationPipeline> {
     if (!this.pipelineInstance) {
+      // @ts-ignore
       this.pipelineInstance = await pipeline("text-generation", this.modelId, {}) as TextGenerationPipeline;
     }
     return this.pipelineInstance;

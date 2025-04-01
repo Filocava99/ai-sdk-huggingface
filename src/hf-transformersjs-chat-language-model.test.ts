@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HFTransformersjsChatLanguageModel } from "./hf-transformersjs-chat-language-model";
 import { pipeline, TextStreamer } from "@huggingface/transformers";

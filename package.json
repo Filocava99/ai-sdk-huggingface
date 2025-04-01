@@ -1,6 +1,6 @@
 {
   "name": "tana-ai-sdk-huggingface",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsup tsup.config.ts",
+    "build": "tsup",
     "dev": "tsup -d --watch",
     "lint": "eslint \"./**/*.ts*\"",
     "test": "pnpm test:node && pnpm test:edge",

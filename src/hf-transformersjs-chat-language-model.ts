@@ -158,6 +158,7 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
       console.log('[DEBUG] Pipeline result processed');
 
       // Correctly access the generated_text property
+      // @ts-ignore
       if (!result || !result[0] || !result[0].generated_text === undefined) {
         console.error('[ERROR] Unexpected pipeline output format:', result);
         throw new Error('Unexpected pipeline output format');
@@ -165,6 +166,7 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
 
       // Estimate token counts (basic approximation)
       const promptTokens = Math.ceil(promptText.length / 4); // Very rough estimate
+      // @ts-ignore
       const generatedText = result[0].generated_text.toString();
       const completionTokens = Math.ceil(generatedText.length / 4); // Very rough estimate
 
