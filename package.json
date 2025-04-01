@@ -62,10 +62,10 @@
   "homepage": "https://sdk.vercel.ai/docs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vercel/ai.git"
+    "url": "git+https://github.com/Filocava99/ai-sdk-huggingface.git"
   },
   "bugs": {
-    "url": "https://github.com/vercel/ai/issues"
+    "url": "https://github.com/Filocava99/ai-sdk-huggingface/issues"
   },
   "keywords": [
     "ai"
