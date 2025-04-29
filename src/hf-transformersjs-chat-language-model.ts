@@ -16,6 +16,9 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
   readonly provider: string;
   readonly defaultObjectGenerationMode = 'json';
 
+  // Common stop sequences for most chat models
+  private readonly defaultStopSequences = ["</s>", "<|endoftext|>", "Human:", "Assistant:", "User:"];
+  
   // @ts-ignore
   private config: { provider: string; apiKey?: string };
   // Hold our pipeline instance once loaded.
@@ -140,10 +143,21 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
     const promptText = this.convertPromptToString(options.prompt);
     console.log('[DEBUG] Prompt converted to string:', promptText.substring(0, 100) + (promptText.length > 100 ? '...' : ''));
 
+    // FIX 1: Add stop sequences
+    const customStopSequences = options.stopSequences || [];
+    const stopSequences = [...this.defaultStopSequences, ...customStopSequences];
+    
+    // FIX 3: Limit max tokens if too high
+    const maxTokens = Math.min(options.maxTokens ?? 256, 512); // Reduced default and capped at 512
+    
     const generationOptions = {
-      max_new_tokens: options.maxTokens ?? 512,
+      max_new_tokens: maxTokens,
       do_sample: (options.temperature ?? 0) > 0,
       temperature: options.temperature ?? 0,
+      stop_strings: stopSequences,
+      top_p: options.topP ?? 0.9,
+      repetition_penalty: 1.2,
+      early_stopping: true,
     };
     console.log('[DEBUG] Generation options:', generationOptions);
 
@@ -157,17 +171,49 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
       const result: TextGenerationOutput[] = Array.isArray(res) ? res as TextGenerationOutput[] : [res];
       console.log('[DEBUG] Pipeline result processed');
 
-      // Correctly access the generated_text property
-      // @ts-ignore
-      if (!result || !result[0] || !result[0].generated_text === undefined) {
-        console.error('[ERROR] Unexpected pipeline output format:', result);
-        throw new Error('Unexpected pipeline output format');
+      // FIX 2: Safely access and process the generated text
+      if (!result || !result.length) {
+        console.error('[ERROR] Empty result from pipeline');
+        throw new Error('Empty result from pipeline');
+      }
+      
+      // Safely extract the generated text with proper type checking and error handling
+      let generatedText: string;
+      try {
+        // FIX 2: Correct handling of TextGenerationOutput (which is an array of TextGenerationSingle)
+        const firstOutput: TextGenerationOutput = result[0];
+        
+        // Verify firstOutput is an array as expected for TextGenerationOutput
+        if (Array.isArray(firstOutput) && firstOutput.length > 0) {
+          // Get the last generation from the array
+          const lastGeneration = firstOutput[firstOutput.length - 1];
+          
+          if (typeof lastGeneration === 'string') {
+            generatedText = lastGeneration;
+          } else if (lastGeneration && typeof lastGeneration.generated_text === 'string') {
+            generatedText = lastGeneration.generated_text;
+          } else if (lastGeneration && lastGeneration.generated_text && typeof lastGeneration.generated_text === 'string') {
+            generatedText = lastGeneration.generated_text;
+          } else {
+            console.error('[ERROR] Cannot extract text from generation output:', lastGeneration);
+            throw new Error('Unable to extract text from generation output');
+          }
+        } else {
+          console.error('[ERROR] Expected TextGenerationOutput to be an array:', firstOutput);
+          throw new Error('Unexpected format for TextGenerationOutput');
+        }
+        
+        // FIX 2: Remove the prompt from the generated text to avoid duplication
+        if (generatedText.startsWith(promptText)) {
+          generatedText = generatedText.substring(promptText.length).trim();
+        }
+      } catch (error) {
+        console.error('[ERROR] Failed to extract generated text:', error);
+        throw new Error('Failed to extract generated text from model response');
       }
 
       // Estimate token counts (basic approximation)
       const promptTokens = Math.ceil(promptText.length / 4); // Very rough estimate
-      // @ts-ignore
-      const generatedText = result[0].generated_text.toString();
       const completionTokens = Math.ceil(generatedText.length / 4); // Very rough estimate
 
       console.log('[DEBUG] Generated text length:', generatedText.length);
@@ -276,12 +322,30 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
     const promptText = this.convertPromptToString(options.prompt);
     console.log('[DEBUG] Prompt converted to string for streaming');
 
+    // FIX 1: Add stop sequences for streaming too
+    const customStopSequences = options.stopSequences || [];
+    const stopSequences = [...this.defaultStopSequences, ...customStopSequences];
+    
+    // FIX 3: Limit max tokens if too high
+    const maxTokens = Math.min(options.maxTokens ?? 256, 512); // Reduced default and capped at 512
+
     const generationOptions = {
-      max_new_tokens: options.maxTokens ?? 512,
+      max_new_tokens: maxTokens,
       do_sample: (options.temperature ?? 0) > 0,
       temperature: options.temperature ?? 0,
+      // FIX 1: Explicitly set stop sequences for streaming
+      stop_strings: stopSequences,
+      // FIX 4: Add more controls for generation in streaming
+      top_p: options.topP ?? 0.9,
+      repetition_penalty: 1.2, // FIX 5: Add repetition penalty
+      early_stopping: true,    // FIX 5: Enable early stopping
     };
     console.log('[DEBUG] Streaming generation options:', generationOptions);
+
+    // Track repetition for streaming
+    let lastTokens: string[] = [];
+    const maxTrackedTokens = 50;
+    const repetitionThreshold = 10;
 
     // Create a ReadableStream to return tokens
     const stream = new ReadableStream<LanguageModelV1StreamPart>({
@@ -292,8 +356,44 @@ export class HFTransformersjsChatLanguageModel implements LanguageModelV1 {
           const tokenCallback = (token: string) => {
             if (token) {
               console.log(`[DEBUG] Token received: "${token}"`);
-              controller.enqueue({ type: 'text-delta', textDelta: token });
+              
+              // FIX 5: Check for repetition in streaming
+              lastTokens.push(token);
+              if (lastTokens.length > maxTrackedTokens) {
+                lastTokens.shift();
+              }
+              
+              // Check if we should stop due to repetition
+              let shouldStop = false;
+              
+              // Check for stop sequences in concatenated tokens
+              const recentText = lastTokens.join('');
+              for (const stopSeq of stopSequences) {
+                if (recentText.includes(stopSeq)) {
+                  console.log(`[DEBUG] Found stop sequence in streaming: "${stopSeq}"`);
+                  shouldStop = true;
+                  break;
+                }
+              }
+              
+              // Simple repetition detection for streaming
+              if (lastTokens.length >= repetitionThreshold) {
+                const firstHalf = lastTokens.slice(0, repetitionThreshold/2).join('');
+                const secondHalf = lastTokens.slice(repetitionThreshold/2, repetitionThreshold).join('');
+                if (firstHalf === secondHalf) {
+                  console.log('[DEBUG] Detected token repetition in streaming, stopping');
+                  shouldStop = true;
+                }
+              }
+              
+              if (!shouldStop) {
+                controller.enqueue({ type: 'text-delta', textDelta: token });
+              } else {
+                // Signal stop to the streaming mechanism if possible
+                return false;
+              }
             }
+            return true;
           };
 
           // Create a TextStreamer with our callback
